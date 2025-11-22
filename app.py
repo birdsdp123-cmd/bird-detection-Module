@@ -1,3 +1,4 @@
+pip install imghdr
 import streamlit as st
 import torch
 import cv2
@@ -168,3 +169,4 @@ else:
         image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         annotated_image = process_image(image_cv)
         st.image(annotated_image, caption="Detected Birds", use_column_width=True)
+
