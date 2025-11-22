@@ -1,172 +1,112 @@
-import streamlit as st
+import os
+import base64
+import requests
 import torch
+import streamlit as st
+from PIL import Image
 import cv2
 import numpy as np
-from PIL import Image
-import os
-import pickle
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-from google.auth.transport.requests import Request
 
-# Function to authenticate with Google Drive
-def authenticate_google_drive(credentials_file):
-    creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
-
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                credentials_file, scopes=['https://www.googleapis.com/auth/drive.readonly']
-            )
-            creds = flow.run_local_server(port=0)
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
-
-    return creds
-
-# Authenticate using the Google Drive credentials
-credentials_path = "Download.Json.json"  # Path to your 'Download.Json.json' file
-creds = authenticate_google_drive(credentials_path)
-
-# Build the Drive API service
-service = build('drive', 'v3', credentials=creds)
-
-# Function to download the YOLO model from Google Drive
-def download_file_from_drive(file_id, destination_path):
-    request = service.files().get_media(fileId=file_id)
-    fh = open(destination_path, 'wb')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-    fh.close()
-
-# List files from Google Drive to get the model ID
-results = service.files().list(pageSize=10, fields="files(id, name)").execute()
-items = results.get('files', [])
-
-# Display the files in your Drive
-if not items:
-    st.write('No files found.')
-else:
-    st.write('Files in your Google Drive:')
-    for item in items:
-        st.write(f'{item["name"]} ({item["id"]})')
-        if item["name"] == "train2_best.pt":  # Match the model file name
-            model_file_id = item["id"]
-            download_file_from_drive(model_file_id, "train2_best.pt")
-            st.success(f"Downloaded model: {item['name']}")
-
-# ------------------------------
-# --- Streamlit Page Setup ---
-# ------------------------------
-st.set_page_config(
-    page_title="Bird Detector Module 🐦",
-    page_icon="🐦",
-    layout="centered",
-    initial_sidebar_state="expanded",
-)
-
-# ------------------------------
-# --- Custom CSS for Modern UI ---
-# ------------------------------
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-image: url("https://images.unsplash.com/photo-1506744038136-46273834b3fb");
-        background-size: cover;
-        background-attachment: fixed;
-        color: white;
-    }
-    .stButton>button {
-        background-color: #4CAF50;
-        color: white;
-        border-radius: 12px;
-        padding: 8px 24px;
-        font-size:16px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-st.title("🦜🎥 Bird Detterence System - Detection Module ")
-st.write("Test images or webcam for bird detection!")
-
-# ------------------------------
-# --- Sidebar Controls ---
-# ------------------------------
-st.sidebar.title("Settings")
-confidence_threshold = st.sidebar.slider(
-    "Confidence Threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.05
-)
-use_webcam = st.sidebar.checkbox("Use Webcam", value=False)
-
-resize_width = st.sidebar.number_input("Resize Image Width (px)", min_value=100, max_value=2000, value=640)
-resize_height = st.sidebar.number_input("Resize Image Height (px, 0 to keep aspect ratio)", min_value=0, max_value=2000, value=0)
-
-# Load the model after downloading it from Google Drive
-@st.cache_resource
-def load_model(path):
-    model = torch.load(path)
-    model.eval()
-    return model
-
-model = load_model("train2_best.pt")
-
-# ------------------------------
-# --- Image Processing Function ---
-# ------------------------------
-def process_image(image_cv):
-    h, w = image_cv.shape[:2]
-    if resize_height == 0:
-        ratio = resize_width / w
-        new_h = int(h * ratio)
-        image_cv = cv2.resize(image_cv, (resize_width, new_h))
-    else:
-        image_cv = cv2.resize(image_cv, (resize_width, resize_height))
-
-    results = model(image_cv)
-
-    filtered_results = []
-    for box, score, cls in zip(results[0].boxes.xyxy, results[0].boxes.conf, results[0].boxes.cls):
-        if score >= confidence_threshold:
-            filtered_results.append((box, score, cls))
-
-    annotated_image = results[0].plot()
-    return annotated_image
-
-# ------------------------------
-# --- Image Input ---
-# ------------------------------
-if use_webcam:
-    stframe = st.empty()
-    cap = cv2.VideoCapture(0)
-    st.write("Press 'Stop' in sidebar to end webcam.")
+# Function to upload files to GitHub using GitHub API
+def upload_file_to_github(file_path, repo_owner, repo_name, file_name, commit_message, github_token):
+    """Upload file to GitHub repository using GitHub API"""
+    with open(file_path, "rb") as f:
+        content = f.read()
     
-    while cap.isOpened() and st.sidebar.checkbox("Stop Webcam", value=False) == False:
-        ret, frame = cap.read()
-        if not ret:
-            st.warning("No camera feed detected.")
-            break
-        annotated_frame = process_image(frame)
-        stframe.image(annotated_frame, channels="BGR")
-    cap.release()
-else:
-    uploaded_file = st.file_uploader("Upload an image for bird detection", type=["jpg", "jpeg", "png"])
+    # Encode the file content to base64
+    encoded_content = base64.b64encode(content).decode('utf-8')
+    
+    # Define GitHub API URL for uploading files
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{file_name}"
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # Create the data payload for uploading
+    data = {
+        "message": commit_message,
+        "content": encoded_content,
+        "branch": "main"  # You can change this to your target branch
+    }
+    
+    # Make the request to upload the file
+    response = requests.put(url, json=data, headers=headers)
+    
+    if response.status_code == 201:
+        st.success(f"Successfully uploaded {file_name} to GitHub!")
+    else:
+        st.error(f"Failed to upload file. Error: {response.status_code} - {response.text}")
+
+# Streamlit interface setup
+st.title("YOLO Model and Image/Video Upload to GitHub")
+
+# User inputs for GitHub details
+repo_owner = "your-github-username"  # Your GitHub username
+repo_name = "your-repo-name"  # Your GitHub repository name
+github_token = "your-github-token"  # Your GitHub Personal Access Token (PAT)
+
+# Step 1: Upload the YOLO Model
+uploaded_model = st.file_uploader("Upload your YOLO model `.pt` file", type=["pt"])
+
+if uploaded_model:
+    model_path = os.path.join("temp", uploaded_model.name)
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    
+    # Save the uploaded model temporarily
+    with open(model_path, "wb") as f:
+        f.write(uploaded_model.getbuffer())
+    
+    # Upload model file to GitHub
+    commit_message = f"Upload YOLO model {uploaded_model.name} via Streamlit"
+    upload_file_to_github(model_path, repo_owner, repo_name, uploaded_model.name, commit_message, github_token)
+    
+    st.success(f"YOLO model '{uploaded_model.name}' uploaded successfully!")
+
+    # Load the model (YOLOv5 example)
+    model = torch.load(model_path)
+    model.eval()
+
+    # Step 2: Upload an Image or Video for testing
+    uploaded_file = st.file_uploader("Upload an image or video for testing", type=["jpg", "jpeg", "png", "mp4", "avi", "mov"])
+    
     if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-        image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        annotated_image = process_image(image_cv)
-        st.image(annotated_image, caption="Detected Birds", use_column_width=True)
+        # Save the uploaded image/video temporarily
+        temp_file_path = os.path.join("temp", uploaded_file.name)
+        os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+        
+        with open(temp_file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Upload the file to GitHub
+        commit_message = f"Upload {uploaded_file.name} for testing via Streamlit"
+        upload_file_to_github(temp_file_path, repo_owner, repo_name, uploaded_file.name, commit_message, github_token)
 
-
+        # Display the uploaded file on Streamlit
+        if uploaded_file.name.lower().endswith(('.jpg', '.jpeg', '.png')):
+            # Display image
+            image = Image.open(temp_file_path)
+            st.image(image, caption=f"Uploaded Image: {uploaded_file.name}", use_column_width=True)
+            
+            # Optionally: Run the model on the image (YOLOv5 inference example)
+            image_cv = np.array(image)
+            results = model(image_cv)  # Run YOLOv5 inference on the image
+            annotated_image = results.render()[0]  # Draw bounding boxes on the image
+            st.image(annotated_image, caption="Detected Image", use_column_width=True)
+        
+        elif uploaded_file.name.lower().endswith(('.mp4', '.avi', '.mov')):
+            # Display video
+            cap = cv2.VideoCapture(temp_file_path)
+            if not cap.isOpened():
+                st.error("Error: Couldn't open video file.")
+            else:
+                stframe = st.empty()
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    stframe.image(frame_rgb, channels="RGB")
+                cap.release()
+else:
+    st.warning("Please upload your YOLO model file first to start the process.")
