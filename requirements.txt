@@ -1,4 +1,4 @@
-streamlit
+streamlit==1.22.0
 markdown-it-py
 pygments
 mdurl
@@ -9,3 +9,4 @@ torchvision
 rich
 opencv-python-headless
 numpy
+
