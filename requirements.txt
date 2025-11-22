@@ -9,4 +9,5 @@ torchvision
 rich
 opencv-python-headless
 numpy
-pip install gdrive
+gdrive
+
