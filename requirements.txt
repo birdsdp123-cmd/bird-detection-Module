@@ -10,4 +10,3 @@ rich
 opencv-python-headless
 numpy
 gdrive
-imghdr
