@@ -1,10 +1,10 @@
 import streamlit as st
 import torch
+from ultralytics import YOLO
 import tempfile
-import cv2
 import numpy as np
 from PIL import Image
-from ultralytics import YOLO
+import cv2
 
 st.set_page_config(
     page_title="Bird Detector Module",
@@ -94,3 +94,4 @@ else:
 
         cap.release()
         st.success("Video processing completed!")
+
