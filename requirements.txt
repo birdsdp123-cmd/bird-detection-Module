@@ -1,13 +1,6 @@
-streamlit==1.22.0
-markdown-it-py
-pygments
-mdurl
-Pillow
-ultralytics
+streamlit==1.29.0
 torch
-torchvision
-rich
-pygobject
+ultralytics==8.2.0
+opencv-python-headless==4.10.0.84
+Pillow
 numpy
-gdrive
-opencv-python-headless==4.7.0.72
