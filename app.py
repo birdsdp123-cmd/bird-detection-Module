@@ -7,9 +7,13 @@ import tempfile
 import numpy as np
 from PIL import Image
 import cv2
+import torch.nn as nn
 
-# Allow YOLO detection model class for safe loading (PyTorch 2.6+)
-torch.serialization.add_safe_globals([DetectionModel])
+# Allow YOLO classes to load safely
+torch.serialization.add_safe_globals([
+    DetectionModel,
+    nn.Sequential
+])
 
 # -----------------------------
 # Streamlit Config
@@ -103,3 +107,4 @@ else:
 
         cap.release()
         st.success("Video processing completed!")
+
